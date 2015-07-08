@@ -1,5 +1,7 @@
+import qualified System.Random as R
 import Data.List(foldl')
 
+type Candidate = [Int]
 type Selection = [Int]
 type Card = ([Int],[Int])
 type CardResult = [Bool]
@@ -8,6 +10,56 @@ data CardStatus = Bingo
                 | Lizhi Int
                 | Blank
                 deriving(Show)
+
+
+
+      
+main = do
+  g <- R.newStdGen
+  let c = cd g [0..99] 34
+  print c
+  
+  g <- R.newStdGen
+  print $ cd g c 24
+  
+  g <- R.newStdGen
+  print $ cd g c 24
+  
+  g <- R.newStdGen
+  print $ cd g c 24
+
+
+--
+-- xs から c個 ランダムに取り出す
+--
+cd :: R.RandomGen g => g -> [Int] -> Int -> [Int]
+cd g xs c = sel xs $ rs g (length xs -1) c
+
+
+-- xs から rsの要素番目の値を順次取り出す
+-- xs 候補リスト
+-- rs Int乱数リスト
+sel ::  [Int] -> [Int] -> [Int]
+sel xs rs = f1 xs rs []
+  where
+    f1 :: [a] -> [Int] -> [a] -> [a]
+    f1 _ [] acc = acc
+    f1 xs (r:rs) acc = f1 (td xs r) rs ((xs !! r):acc)
+
+    td :: [a] -> Int -> [a] -- xs から n 番めを除去
+    td xs n = (take n xs) ++ (drop (n+1) xs)
+
+
+-- 0 から m, m-1, m-2, ... のInt乱数を c個生成する
+-- m は1個ずつ減る
+rs :: R.RandomGen g => g -> Int -> Int -> [Int]
+rs g m c = map ( \(i,f)-> intR (m-i) f ) $ zip [0..(c-1)] (R.randoms g :: [Float])
+  where
+    intR :: Int -> Float -> Int -- Floatの乱数(f)を上限mのIntの乱数に変換
+    intR m f = truncate $ (fromIntegral (m+1)) * f 
+
+
+
 
 
 (+++) :: CardStatus -> CardStatus -> CardStatus
@@ -50,13 +102,13 @@ v :: Int -> [a] -> [a]
 v y l = take 5 $ drop (y*5) l
 
 h :: Int -> [a] -> [a]
-h x l = foldr (\i acc -> (take 1 $ drop ((i*5)+x) l) ++ acc) [] [0..4]
+h x l = foldr (\i acc -> [l !! ((i*5)+x)] ++ acc) [] [0..4]
 
 lTrB :: [a] -> [a]
-lTrB l = foldr (\i acc -> (take 1 $ drop (i*6) l) ++ acc) [] [0..4]
+lTrB l = foldr (\i acc -> [l !! (i*6)] ++ acc) [] [0..4]
 
 rTlB :: [a] -> [a]
-rTlB l = foldr (\i acc -> (take 1 $ drop ((i+1)*4) l) ++ acc) [] [0..4]
+rTlB l = foldr (\i acc -> [l !! ((i+1)*4)] ++ acc) [] [0..4]
 
 
 
@@ -68,32 +120,32 @@ test = do
 
 
 testEc = do
-  print $ evalCard $ map (\i-> i==1) [1,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  print $ evalCard $ map (\i-> i==1) [1,1,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  print $ evalCard $ map (\i-> i==1) [1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0]
-  print $ evalCard $ map (\i-> i==1) [1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,1,1,1]
-  print $ evalCard $ map (\i-> i==1) [1,1,1,1,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,1,1,1]
-  print $ evalCard $ map (\i-> i==1) [1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,1,1]
+  print $ evalCard $ map (==1) [1,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+  print $ evalCard $ map (==1) [1,1,0,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+  print $ evalCard $ map (==1) [1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0]
+  print $ evalCard $ map (==1) [1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,1,1,1]
+  print $ evalCard $ map (==1) [1,1,1,1,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1,1,1,1]
+  print $ evalCard $ map (==1) [1,1,0,1,1,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,1,1,1]
 
 testEv = do
-  print $ evalV 0 $ map (\i-> i==1) [1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  print $ evalV 1 $ map (\i-> i==1) [0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
-  print $ evalV 2 $ map (\i-> i==1) [0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0]
-  print $ evalV 3 $ map (\i-> i==1) [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0]
-  print $ evalV 4 $ map (\i-> i==1) [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0]
+  print $ evalV 0 $ map (==1) [1,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+  print $ evalV 1 $ map (==1) [0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+  print $ evalV 2 $ map (==1) [0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0]
+  print $ evalV 3 $ map (==1) [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,0]
+  print $ evalV 4 $ map (==1) [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0]
 
 testEh = do
-  print $ evalH 0 $ map (\i-> i==1) [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0]
-  print $ evalH 1 $ map (\i-> i==1) [0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0]
-  print $ evalH 2 $ map (\i-> i==1) [0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0]
-  print $ evalH 3 $ map (\i-> i==1) [0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0]
-  print $ evalH 4 $ map (\i-> i==1) [0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0]
+  print $ evalH 0 $ map (==1) [1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,0]
+  print $ evalH 1 $ map (==1) [0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0]
+  print $ evalH 2 $ map (==1) [0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0]
+  print $ evalH 3 $ map (==1) [0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0]
+  print $ evalH 4 $ map (==1) [0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0]
 
 testEl = do
-  print $ evalL $ map (\i-> i==1) [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0]
+  print $ evalL $ map (==1) [1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0]
 
 testEr = do
-  print $ evalR $ map (\i-> i==1) [0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0]
+  print $ evalR $ map (==1) [0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0]
 
 
 testv = do
