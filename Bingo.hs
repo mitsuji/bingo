@@ -102,13 +102,13 @@ v :: Int -> [a] -> [a]
 v y l = take 5 $ drop (y*5) l
 
 h :: Int -> [a] -> [a]
-h x l = foldr (\i acc -> [l !! ((i*5)+x)] ++ acc) [] [0..4]
+h x l = foldr (\i acc -> (l !! ((i*5)+x)) : acc) [] [0..4]
 
 lTrB :: [a] -> [a]
-lTrB l = foldr (\i acc -> [l !! (i*6)] ++ acc) [] [0..4]
+lTrB l = foldr (\i acc -> (l !! (i*6)) : acc) [] [0..4]
 
 rTlB :: [a] -> [a]
-rTlB l = foldr (\i acc -> [l !! ((i+1)*4)] ++ acc) [] [0..4]
+rTlB l = foldr (\i acc -> (l !! ((i+1)*4)) : acc) [] [0..4]
 
 
 
