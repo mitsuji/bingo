@@ -16,48 +16,47 @@ data CardStatus = Bingo
       
 main = do
   g <- R.newStdGen
-  let c = cd g [0..99] 34
-  print c
+  let cs = selectRandom g [0..99] 35
+  print cs
   
   g <- R.newStdGen
-  print $ cd g c 24
+  print $ selectRandom g cs 25
   
   g <- R.newStdGen
-  print $ cd g c 24
+  print $ selectRandom g cs 25
   
   g <- R.newStdGen
-  print $ cd g c 24
+  print $ selectRandom g cs 25
 
 
 --
 -- xs から c個 ランダムに取り出す
 --
-cd :: R.RandomGen g => g -> [Int] -> Int -> [Int]
-cd g xs c = sel xs $ rs g (length xs -1) c
+selectRandom :: R.RandomGen g => g -> [Int] -> Int -> [Int]
+selectRandom g xs c = gradualSelect xs (decrescIntRandom g ((length xs)-1) c) []
 
 
--- xs から rsの要素番目の値を順次取り出す
--- xs 候補リスト
--- rs Int乱数リスト
-sel ::  [Int] -> [Int] -> [Int]
-sel xs rs = f1 xs rs []
+-- xs から {rsの要素}番目の値を順次取り出す
+-- xs  候補リスト
+-- rs  Int乱数リスト
+-- acc アキュムレータ
+gradualSelect :: [a] -> [Int] -> [a] -> [a]
+gradualSelect _ [] acc = acc
+gradualSelect xs (r:rs) acc = gradualSelect (reduce xs r) rs ((xs !! r):acc)
   where
-    f1 :: [a] -> [Int] -> [a] -> [a]
-    f1 _ [] acc = acc
-    f1 xs (r:rs) acc = f1 (td xs r) rs ((xs !! r):acc)
-
-    td :: [a] -> Int -> [a] -- xs から n 番めを除去
-    td xs n = (take n xs) ++ (drop (n+1) xs)
+    reduce :: [a] -> Int -> [a] -- xs から n 番めを除去
+    reduce xs n = (take n xs) ++ (drop (n+1) xs)
 
 
--- 0 から m, m-1, m-2, ... のInt乱数を c個生成する
--- m は1個ずつ減る
-rs :: R.RandomGen g => g -> Int -> Int -> [Int]
-rs g m c = map ( \(i,f)-> intR (m-i) f ) $ zip [0..(c-1)] (R.randoms g :: [Float])
+-- [0 -> m, 0 -> (m-1), 0 -> (m-2), ...] と範囲が順次減少するInt乱数リストを c個生成
+-- g 乱数発生器
+-- m 上限値の初期値
+-- c 生成するリストの長さ
+decrescIntRandom :: R.RandomGen g => g -> Int -> Int -> [Int]
+decrescIntRandom g m c = map ( \(i,f)-> toInt (m-i) f ) $ zip [0..(c-1)] (R.randoms g :: [Float])
   where
-    intR :: Int -> Float -> Int -- Floatの乱数(f)を上限mのIntの乱数に変換
-    intR m f = truncate $ (fromIntegral (m+1)) * f 
-
+    toInt :: Int -> Float -> Int -- Floatの乱数(f)を上限mのInt乱数に変換
+    toInt m f = truncate $ (fromIntegral (m+1)) * f 
 
 
 
