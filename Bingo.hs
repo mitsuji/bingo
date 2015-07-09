@@ -13,20 +13,83 @@ data CardStatus = Bingo
 
 
 
-      
+
 main = do
   g <- R.newStdGen
-  let cs = selectRandom g [0..99] 35
-  print cs
+  let cs = newCandidate g
   
   g <- R.newStdGen
-  print $ selectRandom g cs 25
+  let card1 = newCard g cs 
   
   g <- R.newStdGen
-  print $ selectRandom g cs 25
-  
+  let card2 = newCard g cs
+      
   g <- R.newStdGen
-  print $ selectRandom g cs 25
+  let card3 = newCard g cs 
+  
+  putStrLn $ "cs: " ++ (show cs)
+  putStrLn $ "card1: " ++ (show card1)
+  putStrLn $ "card2: " ++ (show card2)
+  putStrLn $ "card3: " ++ (show card3)
+
+  s <- doBingo 1 card1 card2 card3 (cs,[])
+  s <- doBingo 2 card1 card2 card3 s
+  s <- doBingo 3 card1 card2 card3 s
+  s <- doBingo 4 card1 card2 card3 s
+  s <- doBingo 5 card1 card2 card3 s
+  s <- doBingo 6 card1 card2 card3 s
+  s <- doBingo 7 card1 card2 card3 s
+  s <- doBingo 8 card1 card2 card3 s
+  s <- doBingo 9 card1 card2 card3 s
+  s <- doBingo 10 card1 card2 card3 s
+  s <- doBingo 11 card1 card2 card3 s
+  s <- doBingo 12 card1 card2 card3 s
+  s <- doBingo 13 card1 card2 card3 s
+  s <- doBingo 14 card1 card2 card3 s
+  s <- doBingo 15 card1 card2 card3 s
+  s <- doBingo 16 card1 card2 card3 s
+  s <- doBingo 17 card1 card2 card3 s
+  s <- doBingo 18 card1 card2 card3 s
+  s <- doBingo 19 card1 card2 card3 s
+  s <- doBingo 20 card1 card2 card3 s
+
+  return ()
+  
+
+doBingo turn card1 card2 card3 s = do
+  g <- R.newStdGen
+  let s'@(rem,sel) = pickRandom g s
+  let cr1 = processCard card1 sel
+  let cr2 = processCard card2 sel
+  let cr3 = processCard card3 sel
+  
+  putStrLn $ (show turn) ++ ": sel: " ++ (show sel)
+  putStrLn $ (show turn) ++ ": card1: " ++ (show $ sbl cr1)
+  putStrLn $ (show turn) ++ ": card2: " ++ (show $ sbl cr2)
+  putStrLn $ (show turn) ++ ": card3: " ++ (show $ sbl cr3)
+  putStrLn $ (show turn) ++ ": eval1: " ++ (show $ evalCard cr1)
+  putStrLn $ (show turn) ++ ": eval2: " ++ (show $ evalCard cr2)
+  putStrLn $ (show turn) ++ ": eval3: " ++ (show $ evalCard cr3)
+
+  return s'
+  
+
+sbl = map (\b -> case b of
+              True -> "T"
+              False -> "F")
+
+
+newCandidate :: R.RandomGen g => g -> [Int]
+newCandidate g = selectRandom g [0..99] 30
+
+newCard :: R.RandomGen g => g -> [Int] -> Card
+newCard g cs = splitAt 12 $ selectRandom g cs 24
+
+
+pickRandom :: R.RandomGen g => g -> ([Int],[Int]) -> ([Int],[Int])
+pickRandom g (rem,sel) = ((reduce rem n),(rem !! n):sel)
+  where
+    (n,_) = R.randomR (0,((length rem)-1)) g
 
 
 --
@@ -43,9 +106,6 @@ selectRandom g xs c = gradualSelect xs (decrescIntRandom g ((length xs)-1) c) []
 gradualSelect :: [a] -> [Int] -> [a] -> [a]
 gradualSelect _ [] acc = acc
 gradualSelect xs (r:rs) acc = gradualSelect (reduce xs r) rs ((xs !! r):acc)
-  where
-    reduce :: [a] -> Int -> [a] -- xs から n 番めを除去
-    reduce xs n = (take n xs) ++ (drop (n+1) xs)
 
 
 -- [0 -> m, 0 -> (m-1), 0 -> (m-2), ...] と範囲が順次減少するInt乱数リストを c個生成
@@ -58,6 +118,10 @@ decrescIntRandom g m c = map ( \(i,f)-> toInt (m-i) f ) $ zip [0..(c-1)] (R.rand
     toInt :: Int -> Float -> Int -- Floatの乱数(f)を上限mのInt乱数に変換
     toInt m f = truncate $ (fromIntegral (m+1)) * f 
 
+
+-- xs から n 番めを除去
+reduce :: [a] -> Int -> [a]
+reduce xs n = (take n xs) ++ (drop (n+1) xs)
 
 
 
