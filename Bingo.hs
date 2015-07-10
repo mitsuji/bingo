@@ -1,5 +1,6 @@
 import qualified System.Random as R
 import Data.List(foldl')
+import Data.Monoid(Monoid,mempty,mappend,(<>))
 
 type Candidate = [Int]
 type Selection = [Int]
@@ -58,7 +59,7 @@ main = do
 
 doBingo turn card1 card2 card3 s = do
   g <- R.newStdGen
-  let s'@(rem,sel) = pickRandom g s
+  let s'@(_,sel) = pickRandom g s
   let cr1 = processCard card1 sel
   let cr2 = processCard card2 sel
   let cr3 = processCard card3 sel
@@ -125,13 +126,16 @@ reduce xs n = (take n xs) ++ (drop (n+1) xs)
 
 
 
-(+++) :: CardStatus -> CardStatus -> CardStatus
-(+++) Bingo _ = Bingo
-(+++) _ Bingo = Bingo
-(+++) (Lizhi n1) (Lizhi n2) = Lizhi (n1 + n2)
-(+++) l@(Lizhi _) _ = l
-(+++) _ l@(Lizhi _) = l
-(+++) _ _ = Blank
+
+instance Monoid CardStatus where
+  mempty = Blank
+  mappend Bingo _ = Bingo
+  mappend _ Bingo = Bingo
+  mappend (Lizhi n1) (Lizhi n2) = Lizhi (n1 + n2)
+  mappend l@(Lizhi _) _ = l
+  mappend _ l@(Lizhi _) = l
+  mappend _  _ = Blank
+
 
 
 
@@ -142,9 +146,9 @@ processCard (card1, card2) sel =
 
 evalCard :: CardResult -> CardStatus
 evalCard cr =
-  (foldl' (\acc i -> acc +++ evalV i cr ) Blank [0..4])
-  +++ (foldl' (\acc i -> acc +++ evalH i cr ) Blank [0..4])
-  +++ evalL cr +++ evalR cr
+  (foldl' (\acc i -> acc <> evalV i cr ) Blank [0..4])
+  <> (foldl' (\acc i -> acc <> evalH i cr ) Blank [0..4])
+  <> evalL cr <> evalR cr
 
   
 evalV n cr = eval $ v n cr
