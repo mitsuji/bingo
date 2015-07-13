@@ -1,6 +1,6 @@
 import qualified System.Random as R
 import Data.List(foldl')
-import Data.Monoid(Monoid,mempty,mappend,(<>))
+import Data.Monoid(Monoid,mempty,mappend,(<>),mconcat)
 
 type Candidate = [Int]
 type Selection = [Int]
@@ -145,10 +145,8 @@ processCard (card1, card2) sel =
 
 
 evalCard :: CardResult -> CardStatus
-evalCard cr =
-  (foldl' (\acc i -> acc <> evalV i cr ) Blank [0..4])
-  <> (foldl' (\acc i -> acc <> evalH i cr ) Blank [0..4])
-  <> evalL cr <> evalR cr
+evalCard =
+  mconcat $ (map evalV [0..4]) ++ (map evalH [0..4]) ++ [evalL, evalR]
 
   
 evalV n cr = eval $ v n cr
