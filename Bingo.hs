@@ -93,11 +93,13 @@ doBingo turn card1 card2 card3 s = do
 
       
 newCandidate :: R.RandomGen g => g -> [Int]
-newCandidate g = Lot.pick g [0..99] 30
+newCandidate g = Lot.pick g [0..99] 58
 
 
 newCard :: R.RandomGen g => g -> [Int] -> Card
-newCard g cs = splitAt 12 $ Lot.pick g cs 24
+newCard g cs = splitAt 4 $ Lot.pick g cs 8
+--newCard g cs = splitAt 12 $ Lot.pick g cs 24
+--newCard g cs = splitAt 24 $ Lot.pick g cs 48
 
 
 processCard :: Card -> [Int] -> [Bool]
@@ -106,8 +108,10 @@ processCard (sect1, sect2) sel =
 
 
 evalCard :: [Bool] -> CardStatus
-evalCard =
-  mconcat $ (map evalH [0..4]) ++ (map evalV [0..4]) ++ [evalLT2RB, evalRT2LB]
+evalCard xs =
+  (mconcat $ (map evalH [0..(l-1)]) ++ (map evalV [0..(l-1)]) ++ [evalLT2RB, evalRT2LB]) xs
+  where
+    l = truncate $ sqrt $ fromIntegral $ length xs
 
   
 evalH n cr = eval $ filterH n cr
@@ -117,12 +121,14 @@ evalRT2LB = eval . filterRT2LB
 
 
 eval :: [Bool] -> CardStatus
-eval cr = 
-  case length $ filter id cr of
-    5 -> Bingo
-    4 -> Lizhi 1
-    otherwise -> Blank
-
+eval xs = 
+  case length $ filter id xs of
+    n | n == l     -> Bingo
+      | n == (l-1) -> Lizhi 1
+      | otherwise  -> Blank
+  where
+    l = length xs
+    
 
 filterH :: Int -> [a] -> [a]
 filterH n xs = take l $ drop (n*l) xs
