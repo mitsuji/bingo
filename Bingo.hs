@@ -1,11 +1,21 @@
+module Bingo (
+  Card,
+  State,
+  CardStatus,
+  newCandidate,
+  newCard,
+  processCard,
+  evalCard
+  ) where
+
 import qualified System.Random as R
 import Data.Monoid(Monoid,mempty,mappend,mconcat)
 import qualified Lottery as Lot
 
 
 
-
 type Card = ([Int],[Int])
+type State = ([Int],[Int])
 
 
 data CardStatus = Bingo
@@ -23,83 +33,26 @@ instance Monoid CardStatus where
 
 
 
-
-main = do
-  g <- R.newStdGen
-  let cs = newCandidate g
-  
-  g <- R.newStdGen
-  let card1 = newCard g cs 
-  
-  g <- R.newStdGen
-  let card2 = newCard g cs
       
-  g <- R.newStdGen
-  let card3 = newCard g cs 
-  
-  putStrLn $ "cs: " ++ (show cs)
-  putStrLn $ "card1: " ++ (show card1)
-  putStrLn $ "card2: " ++ (show card2)
-  putStrLn $ "card3: " ++ (show card3)
+newCandidate9 g = newCandidate g 9
+newCandidate25 g = newCandidate g 25
+newCandidate49 g = newCandidate g 49
 
-  s <- doBingo 1 card1 card2 card3 (cs,[])
-  s <- doBingo 2 card1 card2 card3 s
-  s <- doBingo 3 card1 card2 card3 s
-  s <- doBingo 4 card1 card2 card3 s
-  s <- doBingo 5 card1 card2 card3 s
-  s <- doBingo 6 card1 card2 card3 s
-  s <- doBingo 7 card1 card2 card3 s
-  s <- doBingo 8 card1 card2 card3 s
-  s <- doBingo 9 card1 card2 card3 s
-  s <- doBingo 10 card1 card2 card3 s
-  s <- doBingo 11 card1 card2 card3 s
-  s <- doBingo 12 card1 card2 card3 s
-  s <- doBingo 13 card1 card2 card3 s
-  s <- doBingo 14 card1 card2 card3 s
-  s <- doBingo 15 card1 card2 card3 s
-  s <- doBingo 16 card1 card2 card3 s
-  s <- doBingo 17 card1 card2 card3 s
-  s <- doBingo 18 card1 card2 card3 s
-  s <- doBingo 19 card1 card2 card3 s
-  s <- doBingo 20 card1 card2 card3 s
 
-  return ()
-  
+newCard9 g = newCard g 9
+newCard25 g = newCard g 25
+newCard49 g = newCard g 49
 
-doBingo turn card1 card2 card3 s = do
-  g <- R.newStdGen
-  let (x,s'@(_,sel)) = Lot.draw g s
-  let cr1 = processCard card1 sel
-  let cr2 = processCard card2 sel
-  let cr3 = processCard card3 sel
-  
-  putStrLn $ (show turn) ++ ": x: " ++ (show x)
-  putStrLn $ (show turn) ++ ": sel: " ++ (show sel)
-  putStrLn $ (show turn) ++ ": card1: " ++ (show $ sbl cr1)
-  putStrLn $ (show turn) ++ ": card2: " ++ (show $ sbl cr2)
-  putStrLn $ (show turn) ++ ": card3: " ++ (show $ sbl cr3)
-  putStrLn $ (show turn) ++ ": eval1: " ++ (show $ evalCard cr1)
-  putStrLn $ (show turn) ++ ": eval2: " ++ (show $ evalCard cr2)
-  putStrLn $ (show turn) ++ ": eval3: " ++ (show $ evalCard cr3)
 
-  return s'
-  
+newCandidate :: R.RandomGen g => g -> Int -> [Int]
+newCandidate g n = Lot.pick g [0..99] $ truncate $ (fromIntegral n) * 1.4
+
+
+newCard :: R.RandomGen g => g -> Int -> [Int] -> Card
+newCard g n cs = splitAt h $ Lot.pick g cs t
   where
-    sbl = map (\b -> case b of
-                  True -> 1
-                  False -> 0)
-
-
-
-      
-newCandidate :: R.RandomGen g => g -> [Int]
-newCandidate g = Lot.pick g [0..99] 58
-
-
-newCard :: R.RandomGen g => g -> [Int] -> Card
-newCard g cs = splitAt 4 $ Lot.pick g cs 8
---newCard g cs = splitAt 12 $ Lot.pick g cs 24
---newCard g cs = splitAt 24 $ Lot.pick g cs 48
+    t = n-1
+    h = div t 2
 
 
 processCard :: Card -> [Int] -> [Bool]
@@ -153,7 +106,7 @@ filterRT2LB xs = foldr (\i acc -> (xs !! ((i+1)*(l-1))) : acc) [] [0..(l-1)]
 
 
 
-test = do
+testP = do
   let cr = processCard ([1,2,3,4,5,6,7,8,9,10,11,12],[14,15,16,17,18,19,20,21,22,23,24,25]) (10:9:8:7:5:4:2:1:[])
   print $ sbl cr
   print $ evalCard cr
