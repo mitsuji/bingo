@@ -1,6 +1,6 @@
 module Lottery (
   draw,
-  pick
+  pick,
   ) where
 
 

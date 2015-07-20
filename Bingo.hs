@@ -5,7 +5,7 @@ module Bingo (
   newCandidate,
   newCard,
   processCard,
-  evalCard
+  evalCard,
   ) where
 
 import qualified System.Random as R
