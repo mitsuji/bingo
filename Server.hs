@@ -64,6 +64,31 @@ data Game = Game
   , gameChan         :: STM.TChan Message
   }
 
+newGame :: GameSecretKey -> GamePublicKey -> GameCaption -> [Int] -> STM.STM Game
+newGame gsk gpk caption ini = do
+  state        <- STM.newTVar (ini,[])
+  participants <- STM.newTVar Map.empty
+  chan         <- STM.newBroadcastTChan
+  return Game { gameSecretKey    = gsk
+              , gamePublicKey    = gpk
+              , gameCaption      = caption
+              , gameState        = state
+              , gameParticipants = participants
+              , gameChan         = chan
+              }
+
+
+data Server = Server
+  { serverGames    :: STM.TVar (Map.Map GamePublicKey Game)
+  , serverGameKeys :: STM.TVar (Map.Map GameSecretKey GamePublicKey)
+  }
+
+newServer :: IO Server
+newServer = do
+  games <- STM.newTVarIO Map.empty
+  keys  <- STM.newTVarIO Map.empty
+  return Server { serverGames = games, serverGameKeys = keys }
+
 --newtype Game = Game GameImp
 
 
@@ -111,7 +136,7 @@ newBoard bsk bpk caption = do
                , boardChan      = chan
                }
 
-  
+{--  
 data Server = Server
   { serverBoards    :: STM.TVar (Map.Map BoardPublicKey Board)
   , serverBoardKeys :: STM.TVar (Map.Map BoardSecretKey BoardPublicKey)
@@ -122,7 +147,7 @@ newServer = do
   boards <- STM.newTVarIO Map.empty
   keys   <- STM.newTVarIO Map.empty
   return Server { serverBoards = boards, serverBoardKeys = keys }
-  
+--}  
   
 
 
@@ -210,7 +235,7 @@ simpleErrorJSON e = object ["success" .= False
 
 
 
-
+{--
 addBoardIO :: Server -> BoardPublicKey -> BoardCaption -> IO (Either Error Board)
 addBoardIO server bpk caption
   | not $ isValidPublicKey bpk   = return $ Left BoardPublicKeyInvalid
@@ -256,7 +281,7 @@ getBoardFromSecretKey server@Server{..} bsk = do
   case mbpk of
     Nothing  -> return $ Nothing
     Just bpk -> getBoardFromPublicKey server bpk
-
+--}
 
 
 
