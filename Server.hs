@@ -50,6 +50,15 @@ data Participant = Participant
   , participantChan :: STM.TChan Message
   }
 
+newParticipant :: ParticipantKey -> B.Card -> STM.STM Participant
+newParticipant pk ini = do
+  card  <- STM.newTVar ini
+  chan  <- STM.newBroadcastTChan 
+  return Participant { participantKey  = pk
+                     , participantCard = card
+                     , participantChan = chan
+                     }
+
 
 type GameSecretKey = String
 type GamePublicKey = String
@@ -89,68 +98,10 @@ newServer = do
   keys  <- STM.newTVarIO Map.empty
   return Server { serverGames = games, serverGameKeys = keys }
 
---newtype Game = Game GameImp
 
 
-type ReporterKey = String
 
-data Reporter = Reporter
-  { reporterKey  :: ReporterKey
-  , reporterAha  :: STM.TVar Int
-  , reporterChan :: STM.TChan Message
-  }
-
-newReporter :: ReporterKey -> STM.STM Reporter
-newReporter rk = do
-  aha   <- STM.newTVar 0
-  chan  <- STM.newBroadcastTChan 
-  return Reporter { reporterKey  = rk
-                  , reporterAha  = aha
-                  , reporterChan = chan
-                  }
-
-
-type BoardSecretKey = String
-type BoardPublicKey = String
-type BoardCaption   = String
-
-data Board = Board
-  { boardSecretKey :: BoardSecretKey
-  , boardPublicKey :: BoardPublicKey
-  , boardCaption   :: BoardCaption
-  , boardAha       :: STM.TVar Int
-  , boardReporters :: STM.TVar (Map.Map ReporterKey Reporter)
-  , boardChan      :: STM.TChan Message
-  }
-
-newBoard :: BoardSecretKey -> BoardPublicKey -> BoardCaption -> STM.STM Board
-newBoard bsk bpk caption = do
-  aha       <- STM.newTVar 0
-  reporters <- STM.newTVar Map.empty
-  chan      <- STM.newBroadcastTChan 
-  return Board { boardSecretKey = bsk
-               , boardPublicKey = bpk
-               , boardCaption   = caption
-               , boardAha       = aha
-               , boardReporters = reporters
-               , boardChan      = chan
-               }
-
-{--  
-data Server = Server
-  { serverBoards    :: STM.TVar (Map.Map BoardPublicKey Board)
-  , serverBoardKeys :: STM.TVar (Map.Map BoardSecretKey BoardPublicKey)
-  }
-
-newServer :: IO Server
-newServer = do
-  boards <- STM.newTVarIO Map.empty
-  keys   <- STM.newTVarIO Map.empty
-  return Server { serverBoards = boards, serverBoardKeys = keys }
---}  
-  
-
-
+{--
 data Response = ResponseBoard BoardSecretKey BoardPublicKey BoardCaption
               | ResponseReset
               deriving (Show)
@@ -169,37 +120,27 @@ instance ToJSON Response where
            ,"type"    .= ("reset" :: String)
            ,"content" .= ("ok" :: String)
            ]
+--}
 
 
-
-data Message = MessageBoard BoardPublicKey BoardCaption
-             | MessageReporter ReporterKey BoardPublicKey BoardCaption
-             | MessageAha Int
-             | MessageTotalAha Int
+data Message = MessageGame GamePublicKey GameCaption
+             | MessageParticipant ParticipantKey GamePublicKey GameCaption
              | MessageReset
              deriving (Show)
                       
 instance ToJSON Message where
-  toJSON (MessageBoard pk ca) =
-    object ["type"    .= ("board" :: String)
+  toJSON (MessageGame pk ca) =
+    object ["type"    .= ("game" :: String)
            ,"content" .= object ["public_key" .= pk
                                 ,"caption"    .= ca
                                 ]
            ]
-  toJSON (MessageReporter rk bpk ca) =
-    object ["type"    .= ("reporter" :: String)
+  toJSON (MessageParticipant rk bpk ca) =
+    object ["type"    .= ("participant" :: String)
            ,"content" .= object ["reporter_key"     .= rk
-                                ,"board_public_key" .= bpk
-                                ,"board_caption"    .= ca
+                                ,"game_public_key" .= bpk
+                                ,"game_caption"    .= ca
                                 ]
-           ]
-  toJSON (MessageAha aha) =
-    object ["type"    .= ("aha" :: String)
-           ,"content" .= aha
-           ]
-  toJSON (MessageTotalAha ta) =
-    object ["type"    .= ("total_aha" :: String)
-           ,"content" .= ta
            ]
   toJSON (MessageReset) =
     object ["type" .= ("reset" :: String)]
@@ -207,20 +148,20 @@ instance ToJSON Message where
 
 
 
-data Error = BoardSecretKeyInvalid
-           | BoardSecretKeyDuplicated
-           | BoardSecretKeyNotSpecified
-           | BoardPublicKeyInvalid
-           | BoardPublicKeyDuplicated
-           | BoardPublicKeyNotSpecified
-           | BoardCaptionInvalid
-           | BoardCaptionNotSpecified
-           | BoardFromSecretKeyNotFound
-           | BoardFromPublicKeyNotFound
-           | ReporterKeyInvalid
-           | ReporterKeyDuplicated
-           | ReporterKeyNotSpecified       -- unused
-           | ReporterFromSecretKeyNotFound -- unused
+data Error = GameSecretKeyInvalid
+           | GameSecretKeyDuplicated
+           | GameSecretKeyNotSpecified
+           | GamePublicKeyInvalid
+           | GamePublicKeyDuplicated
+           | GamePublicKeyNotSpecified
+           | GameCaptionInvalid
+           | GameCaptionNotSpecified
+           | GameFromSecretKeyNotFound
+           | GameFromPublicKeyNotFound
+           | ParticipantKeyInvalid
+           | ParticipantKeyDuplicated
+           | ParticipantKeyNotSpecified       -- unused
+           | ParticipantFromSecretKeyNotFound -- unused
            deriving (Show,Typeable,Data)
 
 
@@ -235,17 +176,18 @@ simpleErrorJSON e = object ["success" .= False
 
 
 
-{--
-addBoardIO :: Server -> BoardPublicKey -> BoardCaption -> IO (Either Error Board)
-addBoardIO server bpk caption
-  | not $ isValidPublicKey bpk   = return $ Left BoardPublicKeyInvalid
-  | not $ isValidCaption caption = return $ Left BoardCaptionInvalid
+
+addGameIO :: Server -> GamePublicKey -> GameCaption -> IO (Either Error Game)
+addGameIO server gpk caption
+  | not $ isValidPublicKey gpk   = return $ Left GamePublicKeyInvalid
+  | not $ isValidCaption caption = return $ Left GameCaptionInvalid
   | otherwise = do
-    mubsk <- nextUUID
-    case mubsk of
-      Nothing   -> return $ Left BoardSecretKeyInvalid
-      Just ubsk -> STM.atomically $
-                   addBoard server (UUID.toString ubsk) bpk caption
+    -- 分母のクジを引く
+    mugsk <- nextUUID
+    case mugsk of
+      Nothing   -> return $ Left GameSecretKeyInvalid
+      Just ugsk -> STM.atomically $
+                   addGame server (UUID.toString ugsk) gpk caption []
   where
     isValidPublicKey cand = (all (\c -> elem c ("abcdefghijklmnopqrstuvwxyz0123456789" :: String) ) cand)
                             && (0 < length cand && length cand <= 20)
@@ -254,37 +196,66 @@ addBoardIO server bpk caption
 
 
 
-addBoard :: Server -> BoardSecretKey -> BoardPublicKey -> BoardCaption -> STM.STM (Either Error Board)
-addBoard Server{..} bsk bpk caption = do
+addGame :: Server -> GameSecretKey -> GamePublicKey -> GameCaption -> [Int] -> STM.STM (Either Error Game)
+addGame Server{..} gsk gpk caption ini = do
 
-  keys   <- STM.readTVar serverBoardKeys
-  boards <- STM.readTVar serverBoards
+  keys   <- STM.readTVar serverGameKeys
+  games <- STM.readTVar serverGames
 
   case () of
-    _ | Map.member bsk keys   -> return $ Left BoardSecretKeyDuplicated
-      | Map.member bpk boards -> return $ Left BoardPublicKeyDuplicated
+    _ | Map.member gsk keys  -> return $ Left GameSecretKeyDuplicated
+      | Map.member gpk games -> return $ Left GamePublicKeyDuplicated
       | otherwise -> do
-        board <- newBoard bsk bpk caption
-        STM.writeTVar serverBoardKeys $ Map.insert bsk bpk keys
-        STM.writeTVar serverBoards    $ Map.insert bpk board boards
-        return $ Right board
+        game <- newGame gsk gpk caption ini
+        STM.writeTVar serverGameKeys $ Map.insert gsk gpk keys
+        STM.writeTVar serverGames   $ Map.insert gpk game games
+        return $ Right game
 
 
-getBoardFromPublicKey :: Server -> BoardPublicKey -> STM.STM (Maybe Board)
-getBoardFromPublicKey Server{..} bpk = 
-  (Map.lookup bpk) <$> STM.readTVar serverBoards
+getGameFromPublicKey :: Server -> GamePublicKey -> STM.STM (Maybe Game)
+getGameFromPublicKey Server{..} gpk = 
+  (Map.lookup gpk) <$> STM.readTVar serverGames
   
 
-getBoardFromSecretKey :: Server -> BoardSecretKey -> STM.STM (Maybe Board)
-getBoardFromSecretKey server@Server{..} bsk = do
-  mbpk <- (Map.lookup bsk) <$> STM.readTVar serverBoardKeys
-  case mbpk of
+getGameFromSecretKey :: Server -> GameSecretKey -> STM.STM (Maybe Game)
+getGameFromSecretKey server@Server{..} gsk = do
+  mgpk <- (Map.lookup gsk) <$> STM.readTVar serverGameKeys
+  case mgpk of
     Nothing  -> return $ Nothing
-    Just bpk -> getBoardFromPublicKey server bpk
---}
+    Just gpk -> getGameFromPublicKey server gpk
 
 
 
+
+addParticipantIO :: Game -> IO (Either Error Participant)
+addParticipantIO game = do
+  -- カードのクジを引く
+  mupk <- nextUUID
+  case mupk of
+    Nothing  -> return $ Left ParticipantKeyInvalid
+    Just upk -> STM.atomically $
+                addParticipant game (UUID.toString upk) ([],[])
+
+
+addParticipant :: Game -> ParticipantKey -> B.Card -> STM.STM (Either Error Participant)
+addParticipant Game{..} pk ini = do
+  participants <- STM.readTVar gameParticipants
+  if Map.member pk participants
+    then return $ Left ParticipantKeyDuplicated
+    else do
+      participant <- newParticipant pk ini
+      STM.writeTVar gameParticipants $ Map.insert pk participant participants
+      return $ Right participant
+              
+
+getParticipant :: Game -> ParticipantKey -> STM.STM (Maybe Participant)
+getParticipant Game{..} pk =
+  (Map.lookup pk) <$> STM.readTVar gameParticipants
+
+
+
+
+{--
 resetBoard :: Board -> STM.STM ()
 resetBoard Board{..} = do
   reporters <- STM.readTVar boardReporters
@@ -296,33 +267,6 @@ resetBoard Board{..} = do
   -- reset message
   STM.writeTChan boardChan MessageReset
   
-
-
-
-addReporterIO :: Board -> IO (Either Error Reporter)
-addReporterIO board = do
-  murk <- nextUUID
-  case murk of
-    Nothing  -> return $ Left ReporterKeyInvalid
-    Just urk -> STM.atomically $
-                addReporter board (UUID.toString urk)
-
-
-addReporter :: Board -> ReporterKey -> STM.STM (Either Error Reporter)
-addReporter Board{..} rk = do
-  reporters <- STM.readTVar boardReporters
-  if Map.member rk reporters
-    then return $ Left ReporterKeyDuplicated
-    else do
-      reporter <- newReporter rk
-      STM.writeTVar boardReporters $ Map.insert rk reporter reporters
-      return $ Right reporter
-              
-
-getReporter :: Board -> ReporterKey -> STM.STM (Maybe Reporter)
-getReporter Board{..} rk =
-  (Map.lookup rk) <$> STM.readTVar boardReporters
-
 
 
 
@@ -349,5 +293,5 @@ ahaBoard Board{..} = do
   STM.writeTVar boardAha aha'
   STM.writeTChan boardChan $ MessageTotalAha aha'
   
-
+--}
 
