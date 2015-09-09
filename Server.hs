@@ -46,13 +46,12 @@ type ParticipantKey = String
 
 data Participant = Participant
   { participantKey  :: ParticipantKey
-  , participantCard :: STM.TVar B.Card
+  , participantCard :: B.Card
   , participantChan :: STM.TChan Message
   }
 
 newParticipant :: ParticipantKey -> B.Card -> STM.STM Participant
-newParticipant pk ini = do
-  card  <- STM.newTVar ini
+newParticipant pk card = do
   chan  <- STM.newBroadcastTChan 
   return Participant { participantKey  = pk
                      , participantCard = card
@@ -68,19 +67,21 @@ data Game = Game
   { gameSecretKey    :: GameSecretKey
   , gamePublicKey    :: GamePublicKey
   , gameCaption      :: GameCaption
+  , gameCandidate    :: [Int]
   , gameState        :: STM.TVar B.State
   , gameParticipants :: STM.TVar (Map.Map ParticipantKey Participant)
   , gameChan         :: STM.TChan Message
   }
 
 newGame :: GameSecretKey -> GamePublicKey -> GameCaption -> [Int] -> STM.STM Game
-newGame gsk gpk caption ini = do
-  state        <- STM.newTVar (ini,[])
+newGame gsk gpk caption cand = do
+  state        <- STM.newTVar (cand,[])
   participants <- STM.newTVar Map.empty
   chan         <- STM.newBroadcastTChan
   return Game { gameSecretKey    = gsk
               , gamePublicKey    = gpk
               , gameCaption      = caption
+              , gameCandidate    = cand
               , gameState        = state
               , gameParticipants = participants
               , gameChan         = chan
@@ -174,7 +175,8 @@ simpleErrorJSON e = object ["success" .= False
                              ]
 
 
-
+n :: Int
+n = 25
 
 
 addGameIO :: Server -> GamePublicKey -> GameCaption -> IO (Either Error Game)
@@ -182,12 +184,13 @@ addGameIO server gpk caption
   | not $ isValidPublicKey gpk   = return $ Left GamePublicKeyInvalid
   | not $ isValidCaption caption = return $ Left GameCaptionInvalid
   | otherwise = do
-    -- 分母のクジを引く
+
+    g <- R.newStdGen
     mugsk <- nextUUID
     case mugsk of
       Nothing   -> return $ Left GameSecretKeyInvalid
       Just ugsk -> STM.atomically $
-                   addGame server (UUID.toString ugsk) gpk caption []
+                   addGame server (UUID.toString ugsk) gpk caption (B.newCandidate g n)
   where
     isValidPublicKey cand = (all (\c -> elem c ("abcdefghijklmnopqrstuvwxyz0123456789" :: String) ) cand)
                             && (0 < length cand && length cand <= 20)
@@ -228,13 +231,15 @@ getGameFromSecretKey server@Server{..} gsk = do
 
 
 addParticipantIO :: Game -> IO (Either Error Participant)
-addParticipantIO game = do
+addParticipantIO game@Game{..} = do
   -- カードのクジを引く
+
+  g <- R.newStdGen
   mupk <- nextUUID
   case mupk of
     Nothing  -> return $ Left ParticipantKeyInvalid
     Just upk -> STM.atomically $
-                addParticipant game (UUID.toString upk) ([],[])
+                addParticipant game (UUID.toString upk) ((B.newCard g n gameCandidate))
 
 
 addParticipant :: Game -> ParticipantKey -> B.Card -> STM.STM (Either Error Participant)
