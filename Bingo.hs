@@ -1,7 +1,7 @@
 module Bingo (
   Card,
   State,
-  CardStatus,
+  CardStatus(..),
   newCandidate,
   newCard,
   processCard,

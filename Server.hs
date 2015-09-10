@@ -42,19 +42,24 @@ import qualified Lottery as Lot
 import qualified Bingo as B
 
 
+
+import Control.Concurrent (forkIO,threadDelay)
+import Control.Exception (throwIO,ErrorCall(..))
+
 type ParticipantKey = String
 
 data Participant = Participant
   { participantKey  :: ParticipantKey
-  , participantCard :: B.Card
+  , participantCard :: STM.TVar B.Card
   , participantChan :: STM.TChan Message
   }
 
 newParticipant :: ParticipantKey -> B.Card -> STM.STM Participant
 newParticipant pk card = do
-  chan  <- STM.newBroadcastTChan 
+  card' <- STM.newTVar card
+  chan  <- STM.newBroadcastTChan
   return Participant { participantKey  = pk
-                     , participantCard = card
+                     , participantCard = card'
                      , participantChan = chan
                      }
 
@@ -67,7 +72,7 @@ data Game = Game
   { gameSecretKey    :: GameSecretKey
   , gamePublicKey    :: GamePublicKey
   , gameCaption      :: GameCaption
-  , gameCandidate    :: [Int]
+  , gameCandidate    :: STM.TVar [Int]
   , gameState        :: STM.TVar B.State
   , gameParticipants :: STM.TVar (Map.Map ParticipantKey Participant)
   , gameChan         :: STM.TChan Message
@@ -75,13 +80,14 @@ data Game = Game
 
 newGame :: GameSecretKey -> GamePublicKey -> GameCaption -> [Int] -> STM.STM Game
 newGame gsk gpk caption cand = do
+  cand'        <- STM.newTVar cand
   state        <- STM.newTVar (cand,[])
   participants <- STM.newTVar Map.empty
   chan         <- STM.newBroadcastTChan
   return Game { gameSecretKey    = gsk
               , gamePublicKey    = gpk
               , gameCaption      = caption
-              , gameCandidate    = cand
+              , gameCandidate    = cand'
               , gameState        = state
               , gameParticipants = participants
               , gameChan         = chan
@@ -100,35 +106,50 @@ newServer = do
   return Server { serverGames = games, serverGameKeys = keys }
 
 
+-- * 新規Game
+-- ** Game -> MessageGame gsk, gpk, gcaption
+
+-- * 新規Participant
+-- ** Participant -> MessageParticipant psk, pcard, gpk, gcaption 
+
+-- * draw
+-- ** 全            -> MessageDraw (x,(_,ss) 今回何が選ばれて、今まで何が選ばれたか
+-- ** 全Participant -> MessageEval CardStatus, [Bool]
+  
+-- * reset
+-- ** 全             -> MessageReset
+-- ** 全Participant  -> MessageCard pcard
+
+
+-- * Game再接続
+-- ** MessageGame + 今まで何が選ばれたか
+
+-- * Participant再接続
+-- ** Participant -> MessageParticipant psk, pcard, gpk, gcaption 
+-- ** Participant -> MessageEval CardStatus, [Bool]
+
 
 
 {--
-data Response = ResponseBoard BoardSecretKey BoardPublicKey BoardCaption
-              | ResponseReset
-              deriving (Show)
-
-instance ToJSON Response where
-  toJSON (ResponseBoard sk pk ca) =
-    object ["success" .= True
-           ,"type"    .= ("board" :: String)
-           ,"content" .= object ["secret_key" .= sk
-                                ,"public_key" .= pk
-                                ,"caption"    .= ca
-                                ]
-           ]
-  toJSON (ResponseReset) =
-    object ["success" .= True
-           ,"type"    .= ("reset" :: String)
-           ,"content" .= ("ok" :: String)
-           ]
---}
-
-
 data Message = MessageGame GamePublicKey GameCaption
-             | MessageParticipant ParticipantKey GamePublicKey GameCaption
+             | MessageParticipant ParticipantKey B.Card GamePublicKey GameCaption
+             | MessageDraw Int [Int]
+             | MessageEval B.CardStatus [Bool]
              | MessageReset
+             | MessageCard B.Card
              deriving (Show)
-                      
+
+instance ToJSON B.CardStatus where
+  toJSON (B.Bingo) =
+    object ["status"  .= ("bingo" :: String)]
+  toJSON (B.Lizhi x) =
+    object ["status"  .= ("lizhi" :: String)
+            ,"rem"    .= x
+           ]
+  toJSON (B.Blank) =
+    object ["status"  .= ("blank" :: String)]
+
+
 instance ToJSON Message where
   toJSON (MessageGame pk ca) =
     object ["type"    .= ("game" :: String)
@@ -136,16 +157,55 @@ instance ToJSON Message where
                                 ,"caption"    .= ca
                                 ]
            ]
-  toJSON (MessageParticipant rk bpk ca) =
+  toJSON (MessageParticipant pk cd gpk ca) =
     object ["type"    .= ("participant" :: String)
-           ,"content" .= object ["reporter_key"     .= rk
-                                ,"game_public_key" .= bpk
+           ,"content" .= object ["key"             .= pk
+                                ,"card"            .= cd
+                                ,"game_public_key" .= gpk
                                 ,"game_caption"    .= ca
+                                ]
+           ]
+  toJSON (MessageDraw x ss) =
+    object ["type"    .= ("card" :: String)
+           ,"content" .= object ["item"     .= x
+                                ,"selected" .= ss
+                                ]
+           ]
+  toJSON (MessageEval state ev) =
+    object ["type"    .= ("card" :: String)
+           ,"content" .= object ["state" .= state
+                                ,"eval"  .= ev
+                                ]
+           ]
+  toJSON (MessageCard cd) =
+    object ["type"    .= ("card" :: String)
+           ,"content" .= object ["card" .= cd
                                 ]
            ]
   toJSON (MessageReset) =
     object ["type" .= ("reset" :: String)]
+--}
 
+data Message = MessageCard B.Card
+             | MessageDraw Int [Int]
+             | MessageReset
+             deriving (Show)
+{--
+instance ToJSON Message where
+  toJSON (MessageCard cd) =
+    object ["type"    .= ("card" :: String)
+           ,"content" .= object ["card" .= cd
+                                ]
+           ]
+  toJSON (MessageDraw x ss) =
+    object ["type"    .= ("card" :: String)
+           ,"content" .= object ["item"     .= x
+                                ,"selected" .= ss
+                                ]
+           ]
+  toJSON (MessageReset) =
+    object ["type" .= ("reset" :: String)]
+--}
 
 
 
@@ -238,8 +298,9 @@ addParticipantIO game@Game{..} = do
   mupk <- nextUUID
   case mupk of
     Nothing  -> return $ Left ParticipantKeyInvalid
-    Just upk -> STM.atomically $
-                addParticipant game (UUID.toString upk) ((B.newCard g n gameCandidate))
+    Just upk -> STM.atomically $ do
+      cand <- STM.readTVar gameCandidate
+      addParticipant game (UUID.toString upk) (B.newCard g n cand)
 
 
 addParticipant :: Game -> ParticipantKey -> B.Card -> STM.STM (Either Error Participant)
@@ -260,43 +321,185 @@ getParticipant Game{..} pk =
 
 
 
-{--
-resetBoard :: Board -> STM.STM ()
-resetBoard Board{..} = do
-  reporters <- STM.readTVar boardReporters
 
-  -- reset all
-  STM.writeTVar boardAha 0
-  mapM_ (\r -> STM.writeTVar (reporterAha r) 0) (Map.elems reporters)
 
-  -- reset message
-  STM.writeTChan boardChan MessageReset
+draw :: Game -> IO ()
+draw Game{..} = do
+  g <- R.newStdGen
+  STM.atomically $ do
+    st <- STM.readTVar gameState
+    let r@(x,st'@(_,ss)) = Lot.draw g st
+    STM.writeTVar gameState st'
+    STM.writeTChan gameChan (MessageDraw x ss)
+
+
+reset :: Game -> IO ()
+reset Game{..} = do
+  g <- R.newStdGen
+  let cand = B.newCandidate g n
+  STM.atomically $ do
+    STM.writeTVar gameCandidate cand
+    STM.writeTVar gameState (cand,[])
+
+  parts <- STM.atomically $ STM.readTVar gameParticipants
+  mapM_ (\p -> do
+            g <- R.newStdGen
+            STM.atomically $ do
+              let card = B.newCard g n cand
+              STM.writeTVar (participantCard p) card
+              STM.writeTChan (participantChan p) (MessageCard card)
+        ) $ Map.elems parts
+    
+  STM.atomically $ STM.writeTChan gameChan MessageReset
+
+
+
+
+
+test :: IO ()
+test = do
+
+  rchan <- STM.newTChanIO
   
+  server <- newServer
+
+  egame1 <- addGameIO server "abcd1234" "テスト"
+  game1 <- case egame1 of
+    Left err -> throwIO $ ErrorCall "error: 1"
+    Right game -> do
+      forkIO $ gameLoop rchan game
+      return game
+      
+  epart1 <- addParticipantIO game1
+  part1 <- case epart1 of
+    Left err -> throwIO $ ErrorCall "error: 2"
+    Right part -> do
+      forkIO $ partLoop rchan game1 part
+      return part
+
+  epart2 <- addParticipantIO game1
+  part2 <- case epart2 of
+    Left err -> throwIO $ ErrorCall "error: 3"
+    Right part -> do
+      forkIO $ partLoop rchan game1 part
+      return part
+
+  epart3 <- addParticipantIO game1
+  part3 <- case epart3 of
+    Left err -> throwIO $ ErrorCall "error: 4"
+    Right part -> do
+      forkIO $ partLoop rchan game1 part
+      return part
 
 
 
-aha :: Board -> ReporterKey -> STM.STM ()
-aha board rk = do
-  mreporter <- getReporter board rk
-  case mreporter of
-    Nothing -> return ()
-    Just reporter -> do
-      ahaBoard board
-      ahaReporter reporter
 
-ahaReporter :: Reporter -> STM.STM ()
-ahaReporter Reporter{..} = do
-  aha <- STM.readTVar reporterAha
-  let aha' = aha +1
-  STM.writeTVar reporterAha aha'
-  STM.writeTChan reporterChan $ MessageAha aha'
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  threadDelay $ 1000 * 1000
+
+  reset game1
+  threadDelay 100
+
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+
+  report rchan
   
-ahaBoard :: Board -> STM.STM ()
-ahaBoard Board{..} = do
-  aha <- STM.readTVar boardAha
-  let aha' = aha +1
-  STM.writeTVar boardAha aha'
-  STM.writeTChan boardChan $ MessageTotalAha aha'
-  
---}
+  return ()
 
+
+
+  where
+    gameLoop :: STM.TChan String -> Game -> IO ()
+    gameLoop rchan game@Game{..} = do
+      chan <- STM.atomically $ STM.dupTChan gameChan
+      loop chan
+      where
+        loop chan = do
+--          msg <- STM.atomically $ STM.readTChan chan
+--          STM.atomically $ STM.writeTChan rchan $ show msg
+          STM.atomically $ do
+            msg <- STM.readTChan chan
+            STM.writeTChan rchan $ show msg
+          threadDelay 100
+          loop chan
+
+
+    partLoop :: STM.TChan String -> Game -> Participant -> IO ()
+    partLoop rchan game@Game{..} part@Participant{..} = do
+      chan <- STM.atomically $ STM.dupTChan gameChan
+      loop chan
+      where
+        loop chan = do
+--          msg <- STM.atomically $ STM.readTChan chan
+--          case msg of
+--            MessageDraw x ss -> do
+--              card <- STM.atomically $ STM.readTVar participantCard
+--              let r = B.processCard card ss
+--              STM.atomically $ do
+--                STM.writeTChan rchan $ show $ sbl r
+--                STM.writeTChan rchan $ show $ B.evalCard r
+          STM.atomically $ do
+            msg <-STM.readTChan chan
+            case msg of
+              MessageDraw x ss -> do
+                card <- STM.readTVar participantCard
+                let r = B.processCard card ss
+                STM.writeTChan rchan $ show $ sbl r
+                STM.writeTChan rchan $ show $ B.evalCard r
+
+              MessageReset -> STM.writeTChan rchan $ show msg
+
+          threadDelay 100
+          loop chan
+
+      
+    report :: STM.TChan String -> IO()
+    report c = loop
+      where
+        loop = do
+          msg <- STM.atomically $ STM.readTChan c
+          putStrLn msg
+          threadDelay 100
+          loop
+          
+    sbl = map (\b -> case b of
+                  True -> 1
+                  False -> 0)
