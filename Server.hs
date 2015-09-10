@@ -28,6 +28,7 @@
 
 import Data.Data (Data,toConstr)
 import Control.Applicative ((<$>),(<*>))
+import Control.Monad (foldM_)
 import Data.Typeable (Typeable)
 import qualified Data.Map as Map
 import Data.UUID.V1 (nextUUID)
@@ -336,21 +337,18 @@ draw Game{..} = do
 reset :: Game -> IO ()
 reset Game{..} = do
   g <- R.newStdGen
-  let cand = B.newCandidate g n
   STM.atomically $ do
+    let (cand,g') = B.newCandidate' g n
     STM.writeTVar gameCandidate cand
     STM.writeTVar gameState (cand,[])
-
-  parts <- STM.atomically $ STM.readTVar gameParticipants
-  mapM_ (\p -> do
-            g <- R.newStdGen
-            STM.atomically $ do
-              let card = B.newCard g n cand
-              STM.writeTVar (participantCard p) card
-              STM.writeTChan (participantChan p) (MessageCard card)
-        ) $ Map.elems parts
-    
-  STM.atomically $ STM.writeTChan gameChan MessageReset
+    parts <- STM.readTVar gameParticipants
+    foldM_ (\g'' p-> do
+               let (card,g''') = B.newCard' g'' n cand
+               STM.writeTVar (participantCard p) card
+               STM.writeTChan (participantChan p) (MessageCard card)
+               return g'''
+           ) g' $ Map.elems parts
+    STM.writeTChan gameChan MessageReset
 
 
 
@@ -409,26 +407,9 @@ test = do
   draw game1
   draw game1
   draw game1
-  draw game1
-  draw game1
-  draw game1
-  draw game1
-  draw game1
-  threadDelay $ 1000 * 1000
 
   reset game1
-  threadDelay 100
 
-  draw game1
-  draw game1
-  draw game1
-  draw game1
-  draw game1
-  draw game1
-  draw game1
-  draw game1
-  draw game1
-  draw game1
   draw game1
   draw game1
   draw game1
@@ -453,8 +434,6 @@ test = do
       loop chan
       where
         loop chan = do
---          msg <- STM.atomically $ STM.readTChan chan
---          STM.atomically $ STM.writeTChan rchan $ show msg
           STM.atomically $ do
             msg <- STM.readTChan chan
             STM.writeTChan rchan $ show msg
@@ -468,14 +447,6 @@ test = do
       loop chan
       where
         loop chan = do
---          msg <- STM.atomically $ STM.readTChan chan
---          case msg of
---            MessageDraw x ss -> do
---              card <- STM.atomically $ STM.readTVar participantCard
---              let r = B.processCard card ss
---              STM.atomically $ do
---                STM.writeTChan rchan $ show $ sbl r
---                STM.writeTChan rchan $ show $ B.evalCard r
           STM.atomically $ do
             msg <-STM.readTChan chan
             case msg of

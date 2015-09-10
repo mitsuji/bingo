@@ -1,12 +1,15 @@
+{-# LANGUAGE PackageImports #-}
 module Lottery (
   draw,
   pick,
+  pick',
   ) where
 
 
 import qualified System.Random as R
 
-
+import Control.Applicative ((<$>))
+import "mtl" Control.Monad.RWS (execRWS,get,tell,put)
 
 
 --
@@ -50,3 +53,29 @@ decrescIntRandom g m c = map ( \(i,f)-> toInt (m-i) f ) $ zip [0..(c-1)] (R.rand
 -- xs から n 番めを除去
 reduce :: [a] -> Int -> [a]
 reduce xs n = (take n xs) ++ (drop (n+1) xs)
+
+
+
+pick' :: R.RandomGen g => g -> [a] -> Int -> ([a],g)
+pick' g xs c = (\((g,_),w) -> (w,g) ) $ execRWS (
+  do
+    let c' = (length xs) - c
+    whileDo ( (c'<) . length . snd <$> get) $ do
+      (g',xs) <- get
+      let (i,g'') = R.randomR (0, (length xs)-1) g'
+      tell [xs !! i]
+      put (g'', reduce xs i)
+  ) () (g,xs)
+  where
+
+    reduce :: [a] -> Int -> [a]
+    reduce xs n = (take n xs) ++ (drop (n+1) xs)
+
+    whileDo :: Monad m => m Bool -> m () -> m ()
+    whileDo fcond fbody = loop
+      where
+        loop = do
+          c <- fcond
+          if c
+            then fbody >> loop
+            else return ()        
