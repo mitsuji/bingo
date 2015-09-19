@@ -2,28 +2,27 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE RecordWildCards #-}
 
---module Server (
---   ReporterKey
---  ,Reporter (..)
---  ,newReporter
---  ,BoardSecretKey
---  ,BoardPublicKey
---  ,BoardCaption
---  ,Board (..)
---  ,newBoard
---  ,Server (..)
---  ,newServer
---  ,Response (..)
---  ,Message (..)
---  ,Error (..)
---  ,addBoardIO
---  ,getBoardFromPublicKey
---  ,getBoardFromSecretKey
---  ,resetBoard
---  ,addReporterIO
---  ,getReporter
---  ,aha
---  ) where
+module Server (
+   ParticipantKey
+  ,Participant (..)
+  ,newParticipant
+  ,GameSecretKey
+  ,GamePublicKey
+  ,GameCaption
+  ,Game (..)
+  ,newGame
+  ,Server (..)
+  ,newServer
+  ,Message (..)
+  ,Error (..)
+  ,addGameIO
+  ,getGameFromPublicKey
+  ,getGameFromSecretKey
+  ,addParticipantIO
+  ,getParticipant
+  ,draw
+  ,reset
+) where
 
 
 import Data.Data (Data,toConstr)
@@ -187,9 +186,14 @@ instance ToJSON Message where
     object ["type" .= ("reset" :: String)]
 --}
 
-data Message = MessageCard B.Card
-             | MessageDraw Int [Int]
-             | MessageReset
+--data Message = MessageCard B.Card
+--             | MessageDraw Int [Int]
+--             | MessageReset
+--             deriving (Show)
+data Message = MessageResetGame
+             | MessageResetParticipant B.Card
+             | MessageDrawGame Int [Int]
+             | MessageDrawParticipant [Bool] B.CardStatus Int [Int] 
              deriving (Show)
 {--
 instance ToJSON Message where
@@ -322,33 +326,78 @@ getParticipant Game{..} pk =
 
 
 
+--draw = draw1
+--reset = reset1
+draw = draw2
+reset = reset2
 
-
-draw :: Game -> IO ()
-draw Game{..} = do
+draw1 :: Game -> IO ()
+draw1 Game{..} = do
   g <- R.newStdGen
   STM.atomically $ do
     st <- STM.readTVar gameState
     let r@(x,st'@(_,ss)) = Lot.draw g st
     STM.writeTVar gameState st'
-    STM.writeTChan gameChan (MessageDraw x ss)
+    STM.writeTChan gameChan (MessageDrawGame x ss)
+    parts <- STM.readTVar gameParticipants
+    mapM_ (\p -> do
+              card <- STM.readTVar (participantCard p)
+              let r = B.processCard card ss
+              let s = B.evalCard r
+              STM.writeTChan (participantChan p) (MessageDrawParticipant r s x ss)
+          ) $ Map.elems parts
+
+draw2 :: Game -> IO ()
+draw2 Game{..} = do
+  g <- R.newStdGen
+  (x,ss) <- STM.atomically $ do
+    st <- STM.readTVar gameState
+    let r@(x,st'@(_,ss)) = Lot.draw g st
+    STM.writeTVar gameState st'
+    STM.writeTChan gameChan (MessageDrawGame x ss)
+    return (x,ss)
+  parts <- STM.atomically $ STM.readTVar gameParticipants
+  mapM_ (\p -> STM.atomically $ do
+            card <- STM.readTVar (participantCard p)
+            let r = B.processCard card ss
+            let s = B.evalCard r
+            STM.writeTChan (participantChan p) (MessageDrawParticipant r s x ss)
+          ) $ Map.elems parts
 
 
-reset :: Game -> IO ()
-reset Game{..} = do
+reset1 :: Game -> IO ()
+reset1 Game{..} = do
   g <- R.newStdGen
   STM.atomically $ do
     let (cand,g') = B.newCandidate' g n
     STM.writeTVar gameCandidate cand
     STM.writeTVar gameState (cand,[])
+    STM.writeTChan gameChan MessageResetGame
     parts <- STM.readTVar gameParticipants
-    foldM_ (\g'' p-> do
+    foldM_ (\g'' p -> do
                let (card,g''') = B.newCard' g'' n cand
                STM.writeTVar (participantCard p) card
-               STM.writeTChan (participantChan p) (MessageCard card)
+               STM.writeTChan (participantChan p) (MessageResetParticipant card)
                return g'''
            ) g' $ Map.elems parts
-    STM.writeTChan gameChan MessageReset
+
+reset2 :: Game -> IO ()
+reset2 Game{..} = do
+  g <- R.newStdGen
+  cand <- STM.atomically $ do
+    let cand = B.newCandidate g n
+    STM.writeTVar gameCandidate cand
+    STM.writeTVar gameState (cand,[])
+    STM.writeTChan gameChan MessageResetGame
+    return cand
+  parts <- STM.atomically $ STM.readTVar gameParticipants
+  mapM_ (\p -> do
+            g <- R.newStdGen
+            STM.atomically $ do
+              let card = B.newCard g n cand
+              STM.writeTVar (participantCard p) card
+              STM.writeTChan (participantChan p) (MessageResetParticipant card)
+        ) $ Map.elems parts
 
 
 
@@ -372,21 +421,21 @@ test = do
   part1 <- case epart1 of
     Left err -> throwIO $ ErrorCall "error: 2"
     Right part -> do
-      forkIO $ partLoop rchan game1 part
+      forkIO $ partLoop rchan part
       return part
 
   epart2 <- addParticipantIO game1
   part2 <- case epart2 of
     Left err -> throwIO $ ErrorCall "error: 3"
     Right part -> do
-      forkIO $ partLoop rchan game1 part
+      forkIO $ partLoop rchan part
       return part
 
   epart3 <- addParticipantIO game1
   part3 <- case epart3 of
     Left err -> throwIO $ ErrorCall "error: 4"
     Right part -> do
-      forkIO $ partLoop rchan game1 part
+      forkIO $ partLoop rchan part
       return part
 
 
@@ -420,6 +469,11 @@ test = do
   draw game1
   draw game1
   draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
+  draw game1
 
   report rchan
   
@@ -436,31 +490,29 @@ test = do
         loop chan = do
           STM.atomically $ do
             msg <- STM.readTChan chan
-            STM.writeTChan rchan $ show msg
+            case msg of
+              MessageResetGame     -> STM.writeTChan rchan $ show msg
+              MessageDrawGame _ _  -> return ()
           threadDelay 100
           loop chan
 
 
-    partLoop :: STM.TChan String -> Game -> Participant -> IO ()
-    partLoop rchan game@Game{..} part@Participant{..} = do
-      chan <- STM.atomically $ STM.dupTChan gameChan
+    partLoop :: STM.TChan String -> Participant -> IO ()
+    partLoop rchan part@Participant{..} = do
+      chan <- STM.atomically $ STM.dupTChan participantChan
       loop chan
       where
         loop chan = do
           STM.atomically $ do
-            msg <-STM.readTChan chan
+            msg <- STM.readTChan chan
             case msg of
-              MessageDraw x ss -> do
-                card <- STM.readTVar participantCard
-                let r = B.processCard card ss
-                STM.writeTChan rchan $ show $ sbl r
-                STM.writeTChan rchan $ show $ B.evalCard r
-
-              MessageReset -> STM.writeTChan rchan $ show msg
-
+              MessageResetParticipant _       ->
+                STM.writeTChan rchan $ show msg
+              MessageDrawParticipant _ s _ _  ->
+                STM.writeTChan rchan $ show s
           threadDelay 100
           loop chan
-
+          
       
     report :: STM.TChan String -> IO()
     report c = loop
@@ -474,3 +526,4 @@ test = do
     sbl = map (\b -> case b of
                   True -> 1
                   False -> 0)
+
