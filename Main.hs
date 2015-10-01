@@ -58,10 +58,10 @@ main = do
 
   
 -- [TODO] change to UserInterrupt
+{--
 data StopException = StopException deriving (Show,Typeable)
 instance Exception StopException
 
-{--
 
 installShutdownHandler :: ThreadId -> IO () -> IO ()
 installShutdownHandler threadBackup close = do
@@ -119,6 +119,7 @@ contentTypeJsonHeader = ("Content-Type","application/json")
 
 plainOldHttpApp :: Server -> Wai.Application
 plainOldHttpApp server req respond
+  | (["draw_game"]   == path) = (drawGameProc   server req respond) `catch` onError
   | (["reset_game"]  == path) = (resetGameProc  server req respond) `catch` onError
   | (["add_game"]    == path) = (addGameProc    server req respond) `catch` onError
   | (["get_game"]    == path) = (getGameProc    server req respond) `catch` onError
@@ -149,25 +150,52 @@ lookupParams key params = do
   
 
 
-data Response = ResponseGame GameSecretKey GamePublicKey GameCaption [Int]
+data Response = ResponseGame GameSecretKey GamePublicKey GameCaption
+              | ResponseDraw
               | ResponseReset
               deriving (Show)
 
 instance ToJSON Response where
-  toJSON (ResponseGame sk pk ca sd) =
+  toJSON (ResponseGame sk pk ca) =
     object ["success" .= True
            ,"type"    .= ("game" :: String)
            ,"content" .= object ["secret_key" .= sk
                                 ,"public_key" .= pk
                                 ,"caption"    .= ca
-                                ,"selected"   .= sd
                                 ]
+           ]
+  toJSON (ResponseDraw) =
+    object ["success" .= True
+           ,"type"    .= ("draw" :: String)
+           ,"content" .= ("ok" :: String)
            ]
   toJSON (ResponseReset) =
     object ["success" .= True
            ,"type"    .= ("reset" :: String)
            ,"content" .= ("ok" :: String)
            ]
+
+
+
+drawGameProc :: Server -> Wai.Application
+drawGameProc server req respond = do
+  (params, _) <- Parse.parseRequestBody Parse.lbsBackEnd req -- parse post parameters
+
+  secretKey <- case lookupParams "secret_key" params of
+    Nothing -> throwErrorIO GameSecretKeyNotSpecified
+    Just sk -> return sk
+
+  g <- R.newStdGen
+  STM.atomically $ do
+    mgame <- getGameFromSecretKey server secretKey
+    case mgame of
+      Nothing -> throwErrorSTM GameFromSecretKeyNotFound
+      Just game -> draw' g game
+  
+  respond $ Wai.responseLBS
+    H.status200
+    [contentTypeJsonHeader]
+    ( AE.encode $ ResponseDraw )
 
 
 
@@ -211,11 +239,11 @@ addGameProc server req respond = do
     Left error  -> throwErrorIO error
     Right game -> return game
 
-  putStrLn $ "ServerState.addGame: secretKey: " ++ (gameSecretKey game) ++ " publicKey: " ++ publicKey ++ " caption: " ++ caption
+  putStrLn $ "Server.addGameIO: secretKey: " ++ (gameSecretKey game) ++ " publicKey: " ++ publicKey ++ " caption: " ++ caption
   respond $ Wai.responseLBS
     H.status200
     [contentTypeJsonHeader]
-    (AE.encode $ ResponseGame (gameSecretKey game) publicKey caption [])
+    (AE.encode $ ResponseGame (gameSecretKey game) publicKey caption)
 
 
 
@@ -232,14 +260,10 @@ getGameProc server req respond = do
     Nothing -> throwErrorIO GameFromSecretKeyNotFound
     Just game -> return game
 
-  st <- STM.atomically $ STM.readTVar (gameState game)
-
-  let (_,sd) = st 
-      
   respond $ Wai.responseLBS
     H.status200
     [contentTypeJsonHeader]
-    ( AE.encode $ ResponseGame secretKey (gamePublicKey game) (gameCaption game) sd )
+    ( AE.encode $ ResponseGame secretKey (gamePublicKey game) (gameCaption game))
 
 
 
@@ -281,7 +305,7 @@ instance ToJSON WSMessage where
                                 ]
            ]
   toJSON (WSMessageParticipant pk gpk ca sd cd) =
-    object ["type"    .= ("reporter" :: String)
+    object ["type"    .= ("participant" :: String)
            ,"content" .= object ["participant_key" .= pk
                                 ,"game_public_key" .= gpk
                                 ,"game_caption"    .= ca

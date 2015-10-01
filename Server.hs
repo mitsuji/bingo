@@ -21,7 +21,9 @@ module Server (
   ,addParticipantIO
   ,getParticipant
   ,draw
+  ,draw'
   ,reset
+  ,reset'
 ) where
 
 
@@ -195,22 +197,45 @@ data Message = MessageResetGame
              | MessageDrawGame Int [Int]
              | MessageDrawParticipant [Bool] B.CardStatus Int [Int] 
              deriving (Show)
-{--
+
 instance ToJSON Message where
-  toJSON (MessageCard cd) =
-    object ["type"    .= ("card" :: String)
-           ,"content" .= object ["card" .= cd
-                                ]
+  toJSON (MessageResetGame) =
+    object ["type" .= ("reset" :: String)]
+
+  toJSON (MessageResetParticipant cd) =
+    object ["type"    .= ("reset" :: String)
+           ,"content" .= object ["card"     .= cd]
            ]
-  toJSON (MessageDraw x ss) =
-    object ["type"    .= ("card" :: String)
+
+  toJSON (MessageDrawGame x ss) =
+    object ["type"    .= ("draw" :: String)
            ,"content" .= object ["item"     .= x
                                 ,"selected" .= ss
                                 ]
            ]
-  toJSON (MessageReset) =
-    object ["type" .= ("reset" :: String)]
---}
+
+  toJSON (MessageDrawParticipant ev st x ss) =
+    object ["type"    .= ("draw" :: String)
+           ,"content" .= object [ "eval"    .= ev
+                                ,"state"    .= st
+                                ,"item"     .= x
+                                ,"selected" .= ss
+                                ]
+           ]
+
+
+instance ToJSON B.CardStatus where
+  toJSON (B.Bingo) =
+    object ["type" .= ("bingo" :: String)]
+    
+  toJSON (B.Blank) =
+    object ["type" .= ("blank" :: String)]
+
+  toJSON (B.Lizhi i) =
+    object ["type"    .= ("lizhi" :: String)
+           ,"content" .= object ["num" .= i]
+           ]
+
 
 
 
@@ -364,6 +389,20 @@ draw2 Game{..} = do
             STM.writeTChan (participantChan p) (MessageDrawParticipant r s x ss)
           ) $ Map.elems parts
 
+draw' :: R.RandomGen g => g -> Game -> STM.STM ()
+draw' g Game{..} = do
+    st <- STM.readTVar gameState
+    let r@(x,st'@(_,ss)) = Lot.draw g st
+    STM.writeTVar gameState st'
+    STM.writeTChan gameChan (MessageDrawGame x ss)
+    parts <- STM.readTVar gameParticipants
+    mapM_ (\p -> do
+              card <- STM.readTVar (participantCard p)
+              let r = B.processCard card ss
+              let s = B.evalCard r
+              STM.writeTChan (participantChan p) (MessageDrawParticipant r s x ss)
+          ) $ Map.elems parts
+
 
 reset1 :: Game -> IO ()
 reset1 Game{..} = do
@@ -398,6 +437,20 @@ reset2 Game{..} = do
               STM.writeTVar (participantCard p) card
               STM.writeTChan (participantChan p) (MessageResetParticipant card)
         ) $ Map.elems parts
+
+reset' :: R.RandomGen g => g -> Game -> STM.STM ()
+reset' g Game{..} = do
+    let (cand,g') = B.newCandidate' g n
+    STM.writeTVar gameCandidate cand
+    STM.writeTVar gameState (cand,[])
+    STM.writeTChan gameChan MessageResetGame
+    parts <- STM.readTVar gameParticipants
+    foldM_ (\g'' p -> do
+               let (card,g''') = B.newCard' g'' n cand
+               STM.writeTVar (participantCard p) card
+               STM.writeTChan (participantChan p) (MessageResetParticipant card)
+               return g'''
+           ) g' $ Map.elems parts
 
 
 
