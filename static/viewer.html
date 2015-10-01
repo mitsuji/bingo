@@ -1,0 +1,44 @@
+<html>
+  <head>
+    <meta content="text/html" charset="UTF-8"/> 
+    <title>Bingo :: Viewer</title>
+    <link rel="stylesheet" href="http://code.jquery.com/ui/1.11.4/themes/smoothness/jquery-ui.css">
+    <script src="http://code.jquery.com/jquery-1.10.2.js"></script>
+    <script src="http://code.jquery.com/ui/1.11.4/jquery-ui.js"></script>
+    <script type="text/javascript" src="smoothie.js"></script>
+    <link rel="stylesheet" type="text/css" href="viewer.css"/>
+    <script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript" src="viewer.js"></script>
+  </head>
+  <body>
+
+    <div id="bar_white"></div><div id="bar_pink"></div>
+    <div id="main">
+      <form>
+	<div id="caption"></div>
+   	<div id="connectionStatus">
+   	  <div class="ok"><p>Conecting :: OK</p></div>
+   	  <div class="ng"><p>Conectiong :: NG &gt;&gt;Please reload&lt;&lt;</p></div>
+   	</div>
+	<ul>
+	  <li><a id="modal-open" class="button-link">::QRcode::</a></li>
+	  <li><input class="button-link" id="reset" type="button" value="reset" /></li>
+	  <li><input class="button-link" id="draw" type="button" value="draw" /></li>
+	  <li class="li_graph"><canvas id="ahagraph" width="800" height="120"></canvas></li>
+	</ul>
+	<p class="txt_item">item</p>
+   	<p id="item"></p>
+	<p class="txt_selected">selected</p>
+   	<p id="selected"></p>
+      </form>
+    </div>
+
+    <!-- qr code dialog -->
+    <div id="modal-qr">
+      <div id="reporterAddress"></div>
+      <img id="qr" src="" />
+      <p><a id="modal-close" class="button-link">...close</a></p>
+    </div>
+    
+  </body>
+</html>

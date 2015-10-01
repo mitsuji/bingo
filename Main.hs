@@ -293,7 +293,7 @@ onCloseError conn (BingoException error) = do
 
 
 data WSMessage = WSMessageGame GamePublicKey GameCaption [Int]
-               | WSMessageParticipant ParticipantKey GamePublicKey GameCaption [Int] B.Card
+               | WSMessageParticipant ParticipantKey GamePublicKey GameCaption [Int] B.Card [Bool] B.CardStatus
                deriving (Show)
                       
 instance ToJSON WSMessage where
@@ -304,13 +304,15 @@ instance ToJSON WSMessage where
                                 ,"selected"   .= sd
                                 ]
            ]
-  toJSON (WSMessageParticipant pk gpk ca sd cd) =
+  toJSON (WSMessageParticipant pk gpk ca sd cd ev st) =
     object ["type"    .= ("participant" :: String)
            ,"content" .= object ["participant_key" .= pk
                                 ,"game_public_key" .= gpk
                                 ,"game_caption"    .= ca
                                 ,"game_selected"   .= sd
                                 ,"card"            .= cd
+                                ,"eval"            .= ev
+                                ,"state"           .= st
                                 ]
            ]
 
@@ -389,13 +391,16 @@ participantServer server pconn = do
   conn <- WS.acceptRequest pconn
   WS.forkPingThread conn 30
 
-  (st,cd) <- STM.atomically $
+  (gst,cd) <- STM.atomically $
              (,) <$> STM.readTVar (gameState game) <*> STM.readTVar (participantCard participant)
 
-  let (_,sd) = st 
+  let (_,sd) = gst
+  let ev = B.processCard cd sd
+  let st = B.evalCard ev
+      
 
   WS.sendTextData conn $ AE.encode $
-    WSMessageParticipant (participantKey participant) (gamePublicKey game) (gameCaption game) sd cd
+    WSMessageParticipant (participantKey participant) (gamePublicKey game) (gameCaption game) sd cd ev st
   
   chan <- STM.atomically $ STM.dupTChan $ participantChan participant
   (loop conn chan) `catch` (onCloseError conn)

@@ -195,7 +195,7 @@ instance ToJSON Message where
 data Message = MessageResetGame
              | MessageResetParticipant B.Card
              | MessageDrawGame Int [Int]
-             | MessageDrawParticipant [Bool] B.CardStatus Int [Int] 
+             | MessageDrawParticipant Int [Int]  [Bool] B.CardStatus
              deriving (Show)
 
 instance ToJSON Message where
@@ -204,7 +204,7 @@ instance ToJSON Message where
 
   toJSON (MessageResetParticipant cd) =
     object ["type"    .= ("reset" :: String)
-           ,"content" .= object ["card"     .= cd]
+           ,"content" .= object ["card" .= cd]
            ]
 
   toJSON (MessageDrawGame x ss) =
@@ -214,12 +214,12 @@ instance ToJSON Message where
                                 ]
            ]
 
-  toJSON (MessageDrawParticipant ev st x ss) =
+  toJSON (MessageDrawParticipant x ss ev st) =
     object ["type"    .= ("draw" :: String)
-           ,"content" .= object [ "eval"    .= ev
-                                ,"state"    .= st
-                                ,"item"     .= x
-                                ,"selected" .= ss
+           ,"content" .= object ["game_item"     .= x
+                                ,"game_selected" .= ss
+                                ,"eval"          .= ev
+                                ,"state"         .= st
                                 ]
            ]
 
@@ -369,7 +369,7 @@ draw1 Game{..} = do
               card <- STM.readTVar (participantCard p)
               let r = B.processCard card ss
               let s = B.evalCard r
-              STM.writeTChan (participantChan p) (MessageDrawParticipant r s x ss)
+              STM.writeTChan (participantChan p) (MessageDrawParticipant x ss r s)
           ) $ Map.elems parts
 
 draw2 :: Game -> IO ()
@@ -386,7 +386,7 @@ draw2 Game{..} = do
             card <- STM.readTVar (participantCard p)
             let r = B.processCard card ss
             let s = B.evalCard r
-            STM.writeTChan (participantChan p) (MessageDrawParticipant r s x ss)
+            STM.writeTChan (participantChan p) (MessageDrawParticipant x ss r s)
           ) $ Map.elems parts
 
 draw' :: R.RandomGen g => g -> Game -> STM.STM ()
@@ -400,7 +400,7 @@ draw' g Game{..} = do
               card <- STM.readTVar (participantCard p)
               let r = B.processCard card ss
               let s = B.evalCard r
-              STM.writeTChan (participantChan p) (MessageDrawParticipant r s x ss)
+              STM.writeTChan (participantChan p) (MessageDrawParticipant x ss r s)
           ) $ Map.elems parts
 
 
@@ -561,7 +561,7 @@ test = do
             case msg of
               MessageResetParticipant _       ->
                 STM.writeTChan rchan $ show msg
-              MessageDrawParticipant _ s _ _  ->
+              MessageDrawParticipant _ _ _ s  ->
                 STM.writeTChan rchan $ show s
           threadDelay 100
           loop chan
