@@ -75,3 +75,14 @@ body{
 	text-align: center;
 }
 
+#matrix table{
+    border-style: solid;
+    border-width: thin;
+    border-collapse: separate;
+}
+#matrix table tr td{
+    border-style: solid;
+    border-width: thin;
+    border-collapse: separate;
+    font-size: 48px;
+}

@@ -72,7 +72,7 @@ $(document).ready(function () {
 	    } else if(json.type == 'reset') {
 		setCard(json.content.card);
 		setEval([]);
-		setState({});
+		$('#message').text('');
 	    }
 	};
 
@@ -119,18 +119,61 @@ $(document).ready(function () {
 
     function setCard( card ) {
 	console.log('setCard: ' + card );
+	var card0 = card[0];
+	var card1 = card[1];
+	
+	var i;
+	for( i=0; i < card0.length; i++ )
+	{
+	    $('#matrix .m' + i).text(card0[i]);
+	}
+	
+	for( i=0; i < card1.length; i++ )
+	{
+	    $('#matrix .m' + (i+13)).text(card1[i]);
+	}
     }
 
     function setEval( ev ) {
 	console.log('setEval: ' + ev );
+	if( ev.length == 0) {
+	    var i;
+	    for( i=0; i < 25; i++ )
+	    {
+		$('#matrix .m' + i).css("color","black");
+		$('#matrix .m' + i).css("background-color","white");
+	    }
+	}else{
+	    var i;
+	    for( i=0; i < ev.length; i++ )
+	    {
+		if(ev[i]){
+		    $('#matrix .m' + i).css("color","white");
+		    $('#matrix .m' + i).css("background-color","red");
+		}else{
+		    $('#matrix .m' + i).css("color","black");
+		    $('#matrix .m' + i).css("background-color","white");
+		}
+	    }
+	}
+	
+
+	
     }
 
     function setState( st ) {
 	console.log('setState: ' + st );
+	if( st == null ) {
+		$('#message').text('');
+	}else{
+	    if( st.type == 'lizhi' ){
+		$('#message').text('リーチ!' + st.content.num);
+	    } else if( st.type == 'bingo') {
+		$('#message').text('ビンゴ!!');
+	    }
+	}
+	
     }
-
-    
-
     
 });
 
