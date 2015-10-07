@@ -1,5 +1,5 @@
 //
-// reporter.html 用 UIコントローラ
+// participant.html 用 UIコントローラ
 //
 $(document).ready(function () {
 
@@ -8,11 +8,9 @@ $(document).ready(function () {
     //
     setConnect(false);
     setCaption('');
-    setTotal('0');
-    setAha('0');
 
-
-    var boardPublicKey = function() {
+    
+    var gamePublicKey = function() {
 	var url = location.href;
 	var posQuery = url.indexOf('?');
 	if( posQuery >= 0 ) {
@@ -24,28 +22,28 @@ $(document).ready(function () {
 
     
     //
-    // boarderPublicKey が指定されていないときは何もしない
+    // gamePublicKey が指定されていないときは何もしない
     //
-    if( boardPublicKey != null ) {
+    if( gamePublicKey != null ) {
 
-	console.log('gamePublicKey: ' + boardPublicKey );
-	console.log('localStorage: pk: ' + localStorage.getItem('pk:' + boardPublicKey));
+	console.log('gamePublicKey: ' + gamePublicKey );
+	console.log('localStorage: pk: ' + localStorage.getItem('pk:' + gamePublicKey));
 
-	connect(boardPublicKey);
+	connect(gamePublicKey);
 	
     }
     
 
-    function connect( boardPublicKey ) {
+    function connect( gamePublicKey ) {
 
 	//
 	// WebSocketクライアントの実装
 	//
 
-	var wsurl = '/participant?game_public_key=' + boardPublicKey;
-	if( localStorage.getItem('pk:' + boardPublicKey) != null)
+	var wsurl = '/participant?game_public_key=' + gamePublicKey;
+	if( localStorage.getItem('pk:' + gamePublicKey) != null)
 	{
-	    wsurl += '&participant_key=' + localStorage.getItem('pk:' + boardPublicKey);
+	    wsurl += '&participant_key=' + localStorage.getItem('pk:' + gamePublicKey);
 	}
 	
 	var ws = webSocketUtil.webSocket( wsurl );
@@ -71,24 +69,11 @@ $(document).ready(function () {
 		setState(json.content.state);
 	    } else if(json.type == 'reset') {
 		setCard(json.content.card);
-		setEval([]);
-		$('#message').text('');
+		setEvalEmpty();
+		setStateEmpty();
 	    }
 	};
 
-
-	//
-	// AHAボタン押下
-	//
-	if ( 'ontouchend' in window ) {
-	    $('#aha')[0].addEventListener('touchend',function(e){
-		ws.send('aha');
-	    },false);
-	} else {
-	    $('#aha').click(function(e){
-		ws.send('aha');
-	    });
-	}
     }
 
     
@@ -109,16 +94,7 @@ $(document).ready(function () {
 	$('#caption').text( caption );
     }
     
-    function setTotal( total ) {
-	$('#totalCount').text(total);
-    }
-    
-    function setAha( aha ) {
-	$('#ahaCount').text(aha);
-    }
-
     function setCard( card ) {
-	console.log('setCard: ' + card );
 	var card0 = card[0];
 	var card1 = card[1];
 	
@@ -135,45 +111,54 @@ $(document).ready(function () {
     }
 
     function setEval( ev ) {
-	console.log('setEval: ' + ev );
-	if( ev.length == 0) {
-	    var i;
-	    for( i=0; i < 25; i++ )
-	    {
-		$('#matrix .m' + i).css("color","black");
+	var i;
+	for( i=0; i < ev.length; i++ )
+	{
+	    if(ev[i]){
+		$('#matrix .m' + i).css("color","white");
+		$('#matrix .m' + i).css("background-color","#f035cf");
+	    }else{
+		$('#matrix .m' + i).css("color","#f035cf");
 		$('#matrix .m' + i).css("background-color","white");
 	    }
-	}else{
-	    var i;
-	    for( i=0; i < ev.length; i++ )
-	    {
-		if(ev[i]){
-		    $('#matrix .m' + i).css("color","white");
-		    $('#matrix .m' + i).css("background-color","red");
-		}else{
-		    $('#matrix .m' + i).css("color","black");
-		    $('#matrix .m' + i).css("background-color","white");
-		}
+	}
+    }
+
+    function setEvalEmpty() {
+	var i;
+	for( i=0; i < 25; i++ )
+	{
+	    if(i == 12){
+		$('#matrix .m' + i).css("color","white");
+		$('#matrix .m' + i).css("background-color","#f035cf");
+	    }else{
+		$('#matrix .m' + i).css("color","#f035cf");
+		$('#matrix .m' + i).css("background-color","white");
 	    }
 	}
-	
-
-	
     }
 
     function setState( st ) {
-	console.log('setState: ' + st );
-	if( st == null ) {
-		$('#message').text('');
-	}else{
-	    if( st.type == 'lizhi' ){
-		$('#message').text('リーチ!' + st.content.num);
-	    } else if( st.type == 'bingo') {
-		$('#message').text('ビンゴ!!');
+	if( st.type == 'lizhi' ){
+	    if(st.content.num == 1) {
+		$('#message').text('リーチ!');
+	    } else if(st.content.num == 2) {
+		$('#message').text('ダブルリーチ!!');
+	    } else if(st.content.num == 3) {
+		$('#message').text('トリプルリーチ!!!');
+	    } else {
+		$('#message').text(st.content.num + '重リーチ!!!!');
 	    }
+	} else if( st.type == 'bingo') {
+	    $('#message').text('ビンゴ!!!!!');
 	}
-	
     }
+
+    function setStateEmpty( ) {
+	$('#message').text('');
+    }
+
+
     
 });
 

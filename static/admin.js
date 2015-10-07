@@ -6,9 +6,9 @@ $(document).ready(function () {
     //
     // dialog object (Singleton)
     //
-    var boardDialog = function( fOnSubmit ) {
+    var gameDialog = function( fOnSubmit ) {
 
-	var divElem = $('#create-board-dialog');
+	var divElem = $('#create-game-dialog');
 	
 	divElem.dialog({
 	    autoOpen: false,
@@ -48,7 +48,7 @@ $(document).ready(function () {
 
 
     $('#addButton').on('click',function( event ){
-	boardDialog.open();
+	gameDialog.open();
     });
 
     
@@ -58,18 +58,18 @@ $(document).ready(function () {
 	    {public_key: publicKey, caption: caption},
 	    function (data){
 		if(data.success) {
-		    boardDialog.close();
+		    gameDialog.close();
 
-		    var boardKeys;
+		    var gameKeys;
 		    if(localStorage.getItem('gameKeys') != null){
-			boardKeys = JSON.parse(localStorage.getItem('gameKeys'));
+			gameKeys = JSON.parse(localStorage.getItem('gameKeys'));
 		    } else {
-			boardKeys = {};
+			gameKeys = {};
 		    }
 
-		    boardKeys[data.content.public_key] = data.content.secret_key;
+		    gameKeys[data.content.public_key] = data.content.secret_key;
 
-		    localStorage.setItem('gameKeys',JSON.stringify(boardKeys));
+		    localStorage.setItem('gameKeys',JSON.stringify(gameKeys));
 
 		    load();
 		    
@@ -84,26 +84,26 @@ $(document).ready(function () {
 
     function load() {
 	
-	jQuery.each($(".boardItem"),function(){
+	jQuery.each($(".gameItem"),function(){
 	    this.remove();
 	})
 	
-	var boardKeys;
+	var gameKeys;
 	if(localStorage.getItem('gameKeys') != null){
-	    boardKeys = JSON.parse(localStorage.getItem('gameKeys'));
+	    gameKeys = JSON.parse(localStorage.getItem('gameKeys'));
 	} else {
-	    boardKeys = {};
+	    gameKeys = {};
 	}
 
-	for (var publicKey in boardKeys ) {
-	    var secretKey = boardKeys[publicKey];
+	for (var publicKey in gameKeys ) {
+	    var secretKey = gameKeys[publicKey];
 
 	    $.post(
 		'http://' + location.host + '/get_game',
 		{secret_key: secretKey},
 		function (data){
 		    if(data.success) {
-			onBoard(data.content);
+			onGame(data.content);
 		    } else {
 			alert('error: ' + data.type);
 		    }
@@ -114,10 +114,10 @@ $(document).ready(function () {
 	
     }
 
-    function onBoard( content ) {
-	var item = $('#boardTemplate').clone(false);
+    function onGame( content ) {
+	var item = $('#gameTemplate').clone(false);
 	item.removeAttr('id');
-	item.addClass('boardItem');
+	item.addClass('gameItem');
 	item.css('display','table-row');
 	item.find('.publicKey').text(content.public_key);
 	item.find('.caption').text(content.caption);
@@ -127,7 +127,7 @@ $(document).ready(function () {
 	item.find('.deleteButton').on('click',function(){
 	    alert("delete: " + content.secret_key);
 	});
-	$('#boardTable').append(item);
+	$('#gameTable').append(item);
     }
 
     load();

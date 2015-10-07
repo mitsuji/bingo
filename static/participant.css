@@ -84,5 +84,6 @@ body{
     border-style: solid;
     border-width: thin;
     border-collapse: separate;
+    text-align:center;
     font-size: 48px;
 }

@@ -19,13 +19,13 @@
     <form>
       <input type="button" value="add" id="addButton" />
       
-      <table border="1" width="80%" id="boardTable">
+      <table border="1" width="80%" id="gameTable">
 	<tr>
 	  <td>publicKey</td>
 	  <td>caption</td>
 	  <td>operation</td>
 	</tr>
-	<tr id="boardTemplate" style="display:none;">
+	<tr id="gameTemplate" style="display:none;">
 	  <td class="publicKey">publicKey</td>
 	  <td class="caption">caption</td>
 	  <td>
@@ -38,8 +38,8 @@
     </form>
     
 
-    <!-- create board dialog -->
-    <div id="create-board-dialog" title="Create New Game">
+    <!-- create game dialog -->
+    <div id="create-game-dialog" title="Create New Game">
       <p class="validateTips">All form fields are required.</p>
  
       <form>

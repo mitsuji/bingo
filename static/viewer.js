@@ -8,10 +8,9 @@ $(document).ready(function () {
     //
     setConnect(false);
     setCaption('');
-    setTotal('0');
 
     
-    var boardPublicKey = function() {
+    var gamePublicKey = function() {
 	var url = location.href;
 	var posQuery = url.indexOf('?');
 	if( posQuery >= 0 ) {
@@ -23,23 +22,23 @@ $(document).ready(function () {
 
 
     //
-    // boarderPublicKey が指定されていないときは何もしない
+    // gamePublicKey が指定されていないときは何もしない
     //
-    if( boardPublicKey != null ) {
+    if( gamePublicKey != null ) {
 
-	console.log('gamePublicKey: ' + boardPublicKey );
+	console.log('gamePublicKey: ' + gamePublicKey );
 
-	connect(boardPublicKey);
+	connect(gamePublicKey);
 	
     }
 
     
-    function connect( boardPublicKey ) {
+    function connect( gamePublicKey ) {
 
 	//
 	// WebSocketクライアントの実装
 	//
-	var ws = webSocketUtil.webSocket('/viewer?public_key=' + boardPublicKey);
+	var ws = webSocketUtil.webSocket('/viewer?public_key=' + gamePublicKey);
 	
 	ws.onopen = function() {
 	    setConnect(true);
@@ -60,7 +59,6 @@ $(document).ready(function () {
 	    } else if(json.type == 'draw') {
 		setDraw(json.content.item,json.content.selected);
 	    } else if(json.type == 'reset') {
-		setTotal('0');
 		setDraw('',[]);
 	    }
 	};
@@ -71,17 +69,17 @@ $(document).ready(function () {
 	//
 	$('#reset').click(function () {
 
-	    var boardKeys;
+	    var gameKeys;
 	    if(localStorage.getItem('gameKeys') != null){
-		boardKeys = JSON.parse(localStorage.getItem('gameKeys'));
+		gameKeys = JSON.parse(localStorage.getItem('gameKeys'));
 	    } else {
-		boardKeys = {};
+		gameKeys = {};
 	    }
 
-	    if(boardKeys.hasOwnProperty(boardPublicKey)) {
+	    if(gameKeys.hasOwnProperty(gamePublicKey)) {
 		$.post(
 		    'http://' + location.host + '/reset_game',
-		    {secret_key: boardKeys[boardPublicKey]},
+		    {secret_key: gameKeys[gamePublicKey]},
 		    function (data){
 			if(data.success) {
 			    // ok
@@ -104,17 +102,17 @@ $(document).ready(function () {
 	//
 	$('#draw').click(function () {
 
-	    var boardKeys;
+	    var gameKeys;
 	    if(localStorage.getItem('gameKeys') != null){
-		boardKeys = JSON.parse(localStorage.getItem('gameKeys'));
+		gameKeys = JSON.parse(localStorage.getItem('gameKeys'));
 	    } else {
-		boardKeys = {};
+		gameKeys = {};
 	    }
 
-	    if(boardKeys.hasOwnProperty(boardPublicKey)) {
+	    if(gameKeys.hasOwnProperty(gamePublicKey)) {
 		$.post(
 		    'http://' + location.host + '/draw_game',
-		    {secret_key: boardKeys[boardPublicKey]},
+		    {secret_key: gameKeys[gamePublicKey]},
 		    function (data){
 			if(data.success) {
 			    // ok
@@ -151,11 +149,6 @@ $(document).ready(function () {
 	$('#caption').text( caption );
     }
 
-    function setTotal( total ) {
-	$('#total').text( total );
-    }
-
-    
     function getReporterAddress( publicKey ) {
 	return 'http://' + location.host + '/participant.html?' + publicKey;
     }
@@ -209,37 +202,8 @@ $(window).load(function(){
     	
     });
 
-    return;
-
-    //
-    // グラフ描画
-    //
-    var smoothie = new SmoothieChart({	//グラフの形の指定
-      grid: { strokeStyle:'rgb(125, 0, 0)', fillStyle:'rgb(60, 0, 0)',
-	      lineWidth: 1, millisPerLine: 250, verticalSections: 6, },
-      labels: { fillStyle:'rgb(60, 0, 0)' }
-    });
-    smoothie.streamTo(document.getElementById("ahagraph"),1000);
-    
-    var line1 = new TimeSeries();
-    setInterval(function() {	// １秒毎に描画
-	var total = g_total - g_total_old;
-	if(total<0) total=0 ;
-	g_total_old =  g_total;
-	line1.append(new Date().getTime(),total);
-    }, 1000);
-    
-    
-    // Add to SmoothieChart
-    smoothie.addTimeSeries(line1,{ strokeStyle:'rgb(255, 0, 255)', fillStyle:'rgba(255, 0, 255, 0.3)', lineWidth:3 });
-    
 });
 
-//
-//　グラフ用に覚えておく変数
-//
-var g_total=0; /* グローバル変数 */
-var g_total_old=0; /* グローバル変数 */
 
 
 //
