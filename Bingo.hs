@@ -3,9 +3,7 @@ module Bingo (
   State,
   CardStatus(..),
   newCandidate,
-  newCandidate',
   newCard,
-  newCard',
   processCard,
   evalCard,
   ) where
@@ -46,21 +44,12 @@ newCard25 g = newCard g 25
 newCard49 g = newCard g 49
 
 
-newCandidate :: R.RandomGen g => g -> Int -> [Int]
+newCandidate :: R.RandomGen g => g -> Int -> ([Int],g)
 newCandidate g n = Lot.pick g [0..99] $ truncate $ (fromIntegral n) * 1.4
 
-newCandidate' :: R.RandomGen g => g -> Int -> ([Int],g)
-newCandidate' g n = Lot.pick' g [0..99] $ truncate $ (fromIntegral n) * 1.4
 
-
-newCard :: R.RandomGen g => g -> Int -> [Int] -> Card
-newCard g n cs = splitAt h $ Lot.pick g cs t
-  where
-    t = n-1
-    h = div t 2
-
-newCard' :: R.RandomGen g => g -> Int -> [Int] -> (Card,g)
-newCard' g n cs = (\(xs,g) -> (splitAt h xs,g)) $ Lot.pick' g cs t
+newCard :: R.RandomGen g => g -> Int -> [Int] -> (Card,g)
+newCard g n cs = (\(xs,g) -> (splitAt h xs,g)) $ Lot.pick g cs t
   where
     t = n-1
     h = div t 2

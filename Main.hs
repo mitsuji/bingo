@@ -190,7 +190,7 @@ drawGameProc server req respond = do
     mgame <- getGameFromSecretKey server secretKey
     case mgame of
       Nothing -> throwErrorSTM GameFromSecretKeyNotFound
-      Just game -> draw' g game
+      Just game -> draw g game
   
   respond $ Wai.responseLBS
     H.status200
@@ -212,7 +212,7 @@ resetGameProc server req respond = do
     mgame <- getGameFromSecretKey server secretKey
     case mgame of
       Nothing -> throwErrorSTM GameFromSecretKeyNotFound
-      Just game -> reset' g game
+      Just game -> reset g game
   
   respond $ Wai.responseLBS
     H.status200
